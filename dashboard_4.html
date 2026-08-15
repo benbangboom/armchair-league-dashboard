@@ -1,0 +1,575 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Arm Chair League Dashboard</title>
+<style>
+  :root{
+    color-scheme: light;
+    --surface-1:#fcfcfb; --page:#f9f9f7; --text-primary:#0b0b0b; --text-secondary:#52514e;
+    --muted:#898781; --grid:#e1e0d9; --baseline:#c3c2b7; --border:rgba(11,11,11,0.10);
+    --good:#0ca30c; --warning:#fab219; --critical:#d03b3b;
+    --s1:#2a78d6; --s2:#eb6834; --s3:#1baf7a; --s4:#eda100; --s5:#e87ba4; --s6:#008300; --s7:#4a3aa7; --s8:#e34948;
+  }
+  @media (prefers-color-scheme: dark){
+    :root:where(:not([data-theme="light"])){
+      color-scheme: dark;
+      --surface-1:#1a1a19; --page:#0d0d0d; --text-primary:#ffffff; --text-secondary:#c3c2b7;
+      --muted:#898781; --grid:#2c2c2a; --baseline:#383835; --border:rgba(255,255,255,0.10);
+      --good:#0ca30c; --warning:#fab219; --critical:#d03b3b;
+      --s1:#3987e5; --s2:#d95926; --s3:#199e70; --s4:#c98500; --s5:#d55181; --s6:#008300; --s7:#9085e9; --s8:#e66767;
+    }
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--page);color:var(--text-primary);font-family:system-ui,-apple-system,"Segoe UI",sans-serif;}
+  header{position:sticky;top:0;z-index:10;background:var(--surface-1);border-bottom:1px solid var(--border);padding:14px 20px;}
+  header h1{margin:0 0 2px 0;font-size:19px;}
+  header .sub{color:var(--text-secondary);font-size:13px;}
+  nav{display:flex;gap:4px;overflow-x:auto;margin-top:12px;padding-bottom:2px;}
+  nav button{white-space:nowrap;background:transparent;border:1px solid var(--border);color:var(--text-secondary);padding:8px 14px;border-radius:8px;font-size:14px;cursor:pointer;}
+  nav button.active{background:var(--s1);color:#fff;border-color:var(--s1);}
+  main{max-width:1080px;margin:0 auto;padding:20px;}
+  .view{display:none;}
+  .view.active{display:block;}
+  .card{background:var(--surface-1);border:1px solid var(--border);border-radius:12px;padding:16px;margin-bottom:16px;}
+  .tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:16px;}
+  .tile{background:var(--surface-1);border:1px solid var(--border);border-radius:12px;padding:14px;}
+  .tile .label{font-size:12px;color:var(--muted);margin-bottom:4px;}
+  .tile .value{font-size:22px;font-weight:600;}
+  .tile .sub{font-size:12px;color:var(--text-secondary);margin-top:2px;}
+  table{width:100%;border-collapse:collapse;font-size:13px;}
+  th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--grid);font-variant-numeric:tabular-nums;}
+  th{color:var(--muted);font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:0.03em;cursor:pointer;user-select:none;}
+  th:hover{color:var(--text-primary);}
+  tbody tr:hover{background:rgba(128,128,128,0.06);}
+  .status{font-size:13px;color:var(--text-secondary);padding:10px 0;}
+  .status.error{color:var(--critical);}
+  select,input[type=range]{font-size:14px;padding:6px 8px;border-radius:8px;border:1px solid var(--border);background:var(--surface-1);color:var(--text-primary);}
+  .row{display:flex;gap:12px;flex-wrap:wrap;align-items:center;margin-bottom:12px;}
+  .toggle-group{display:flex;gap:8px;flex-wrap:wrap;}
+  .toggle-group label{display:flex;align-items:center;gap:6px;font-size:13px;background:var(--surface-1);border:1px solid var(--border);padding:6px 10px;border-radius:8px;}
+  h2{font-size:16px;margin:0 0 12px 0;}
+  h3{font-size:13px;color:var(--text-secondary);text-transform:uppercase;letter-spacing:0.03em;margin:0 0 10px 0;}
+  .badge{display:inline-block;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:600;}
+  .badge.good{background:rgba(12,163,12,0.14);color:var(--good);}
+  .badge.crit{background:rgba(208,59,59,0.14);color:var(--critical);}
+  .bar-row{display:flex;align-items:center;gap:8px;margin:6px 0;font-size:13px;}
+  .bar-row .name{width:150px;flex-shrink:0;color:var(--text-secondary);}
+  .bar-track{flex:1;background:var(--grid);border-radius:4px;height:10px;position:relative;overflow:hidden;}
+  .bar-fill{height:100%;border-radius:4px;background:var(--s1);}
+  .bar-val{width:60px;text-align:right;flex-shrink:0;font-variant-numeric:tabular-nums;}
+  .footer-note{font-size:11px;color:var(--muted);margin-top:20px;text-align:center;}
+  .team-card{display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--grid);}
+  .team-card:last-child{border-bottom:none;}
+  .team-card .tname{font-weight:600;font-size:14px;}
+  .team-card .owner{font-size:12px;color:var(--text-secondary);}
+  .refresh-btn{background:var(--s1);color:#fff;border:none;padding:8px 14px;border-radius:8px;font-size:13px;cursor:pointer;}
+  .spinner{display:inline-block;width:14px;height:14px;border:2px solid var(--grid);border-top-color:var(--s1);border-radius:50%;animation:spin 0.8s linear infinite;margin-right:6px;vertical-align:-2px;}
+  @keyframes spin{to{transform:rotate(360deg);}}
+</style>
+</head>
+<body>
+<header>
+  <h1>🏈 Arm Chair League</h1>
+  <div class="sub" id="headerSub">League history, awards &amp; the what-if rule simulator</div>
+  <nav id="tabNav">
+    <button data-view="standings" class="active">All-Time Standings</button>
+    <button data-view="history">Season History</button>
+    <button data-view="awards">Awards</button>
+    <button data-view="simulator">What-If Simulator</button>
+  </nav>
+</header>
+
+<main>
+
+  <div class="view active" id="view-standings">
+    <div id="standingsTiles" class="tiles"></div>
+    <div class="card">
+      <h2>Career Standings</h2>
+      <div id="standingsStatus" class="status">Loading…</div>
+      <div style="overflow-x:auto;">
+      <table id="standingsTable" style="display:none;">
+        <thead><tr>
+          <th data-key="name">Manager</th>
+          <th data-key="seasons">Seasons</th>
+          <th data-key="record">Record</th>
+          <th data-key="winpct">Win%</th>
+          <th data-key="chips">Chips</th>
+          <th data-key="rsc">RSC</th>
+          <th data-key="playoffs">Playoffs</th>
+          <th data-key="pf">Career PF</th>
+          <th data-key="earnings">Career $</th>
+        </tr></thead>
+        <tbody></tbody>
+      </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="view" id="view-history">
+    <div class="card">
+      <div class="row">
+        <h2 style="margin:0;">Season:</h2>
+        <select id="yearSelect"></select>
+      </div>
+      <div id="historyTiles" class="tiles"></div>
+      <div style="overflow-x:auto;">
+      <table id="historyTable">
+        <thead><tr>
+          <th>Manager</th><th>Team</th><th>Reg. Rank</th><th>W</th><th>L</th><th>PF</th><th>PA</th><th>Playoff Rank</th><th>Chip</th><th>RSC</th><th>Net $</th>
+        </tr></thead>
+        <tbody></tbody>
+      </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="view" id="view-awards">
+    <div id="awardsGrid" class="card">
+      <div class="status">Loading…</div>
+    </div>
+  </div>
+
+  <div class="view" id="view-simulator">
+    <div class="card">
+      <h2>What-If Rule Simulator</h2>
+      <div class="status">Recomputes actual weekly box scores under alternate scoring rules. Only available for seasons this league played on Sleeper.</div>
+      <div class="row" style="margin-top:10px;">
+        <label>Season <select id="simSeason"></select></label>
+        <label>Week <select id="simWeek"></select></label>
+        <button class="refresh-btn" id="simRun">Recalculate</button>
+      </div>
+      <div class="row toggle-group" id="simToggles">
+        <label><input type="radio" name="ppr" value="0"> Standard (0 PPR)</label>
+        <label><input type="radio" name="ppr" value="0.5" checked> Half PPR</label>
+        <label><input type="radio" name="ppr" value="1"> Full PPR</label>
+        <label><input type="checkbox" id="tePremium"> TE Premium (+0.5/rec)</label>
+        <label><input type="checkbox" id="bonus100"> +3 bonus on 100+ rush/rec yd games</label>
+      </div>
+      <div id="simStatus" class="status"></div>
+      <div id="simResults"></div>
+    </div>
+  </div>
+
+  <div class="footer-note">Historical data live from Google Sheets · Simulator data live from Sleeper · Current-season standings live on Sleeper · Built for the Armchair Football League</div>
+</main>
+
+<script>
+const SHEET_ID = "1lcly0jwpb1gjXQRZUUGNuBbbYCETklyJ6rh7TtcX6UE";
+const SLEEPER_LEAGUE_ID = "1389735870063452160";
+
+// JSONP loader for Google Sheets gviz endpoint. We use JSONP (a <script> tag)
+// instead of fetch() because pages opened from a local file:// URL are blocked
+// by Chrome from making CORS fetch() requests to docs.google.com, even though
+// the endpoint itself is public. A <script src="..."> tag is not subject to
+// that restriction, so this works from file://, http://, and https:// alike.
+let _gvizCounter = 0;
+function gvizJsonp(tabName, timeoutMs = 12000){
+  return new Promise((resolve, reject)=>{
+    const cbName = `__gviz_cb_${Date.now()}_${_gvizCounter++}`;
+    const url = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json;responseHandler:${cbName}&sheet=${encodeURIComponent(tabName)}`;
+    const script = document.createElement('script');
+    let done = false;
+    const cleanup = ()=>{ delete window[cbName]; script.remove(); clearTimeout(timer); };
+    const timer = setTimeout(()=>{
+      if(done) return; done = true; cleanup();
+      reject(new Error(`Timed out loading sheet tab "${tabName}" (check that the sheet is shared "anyone with the link can view")`));
+    }, timeoutMs);
+    window[cbName] = (json)=>{
+      if(done) return; done = true; cleanup();
+      resolve(json);
+    };
+    script.src = url;
+    script.onerror = ()=>{
+      if(done) return; done = true; cleanup();
+      reject(new Error(`Could not reach Google Sheets for tab "${tabName}"`));
+    };
+    document.head.appendChild(script);
+  });
+}
+
+function gvizTableToRows(json){
+  const table = json.table;
+  const rows = table.rows.map(r => (r.c||[]).map(cell=>{
+    if(cell === null || cell === undefined) return '';
+    if(cell.f !== undefined && cell.f !== null) return String(cell.f);
+    if(cell.v === undefined || cell.v === null) return '';
+    return String(cell.v);
+  }));
+  return rows;
+}
+
+// --- minimal CSV parser (handles quoted fields, commas, embedded quotes) ---
+function parseCSV(text){
+  const rows = [];
+  let row = [], field = '', inQuotes = false;
+  for(let i=0;i<text.length;i++){
+    const c = text[i];
+    if(inQuotes){
+      if(c === '"'){
+        if(text[i+1] === '"'){ field += '"'; i++; } else { inQuotes = false; }
+      } else field += c;
+    } else {
+      if(c === '"') inQuotes = true;
+      else if(c === ','){ row.push(field); field=''; }
+      else if(c === '\n'){ row.push(field); rows.push(row); row=[]; field=''; }
+      else if(c === '\r'){ /* skip */ }
+      else field += c;
+    }
+  }
+  if(field.length || row.length){ row.push(field); rows.push(row); }
+  return rows.filter(r => r.length > 1 || (r.length===1 && r[0] !== ''));
+}
+
+function dedupeHeader(header){
+  const seen = {};
+  return header.map(h=>{
+    const key = (h||'').trim() || 'col';
+    if(seen[key] === undefined){ seen[key]=0; return key; }
+    seen[key]++; return key + '_' + (seen[key]+1);
+  });
+}
+
+// header comes from a separate source than the data rows (see fetchSheetTab) —
+// on this sheet, Google's auto header-detection reliably reads the real column
+// names into table.cols[].label for normally-laid-out tabs, and table.rows then
+// contains ONLY data rows (no header row mixed in), so no slicing is needed.
+function toObjectsWithHeader(header, dataRows){
+  const cols = dedupeHeader(header);
+  return dataRows.map(r=>{
+    const o = {};
+    cols.forEach((c,i)=> o[c] = r[i] !== undefined ? r[i] : '');
+    return o;
+  });
+}
+
+async function fetchSheetTab(tabName){
+  const json = await gvizJsonp(tabName);
+  if(json.status === 'error'){
+    const msg = (json.errors && json.errors[0] && json.errors[0].detailed_message) || 'unknown error';
+    throw new Error(`Sheet tab "${tabName}" failed to load: ${msg}`);
+  }
+  const header = json.table.cols.map(c=>c.label || '');
+  const rows = gvizTableToRows(json);
+  return toObjectsWithHeader(header, rows);
+}
+
+function num(v){ const n = parseFloat(String(v).replace(/[^0-9.\-]/g,'')); return isNaN(n) ? 0 : n; }
+
+// ---------- Tab switching ----------
+document.getElementById('tabNav').addEventListener('click', e=>{
+  const btn = e.target.closest('button[data-view]');
+  if(!btn) return;
+  document.querySelectorAll('#tabNav button').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
+  document.getElementById('view-'+btn.dataset.view).classList.add('active');
+});
+
+// ---------- Global state ----------
+let LEAGUE_DATA = []; // rows from "Data" tab
+let SUMMARY_DATA = [];
+
+function fmtMoney(n){
+  const sign = n < 0 ? '-' : '';
+  return sign + '$' + Math.abs(Math.round(n)).toLocaleString();
+}
+
+// ---------- All-Time Standings ----------
+function buildStandings(){
+  const byName = {};
+  LEAGUE_DATA.forEach(r=>{
+    const name = r.Name && r.Name.trim();
+    if(!name) return;
+    if(!byName[name]) byName[name] = {name, seasons:0, w:0, l:0, pf:0, chips:0, rsc:0, playoffs:0, earnings:0};
+    const b = byName[name];
+    const hasSeason = r.Team && r.Team.trim() !== '';
+    if(hasSeason) b.seasons++;
+    b.w += num(r['Reg Win']);
+    b.l += num(r['Reg Loss']);
+    b.pf += num(r.PF);
+    if((r.Chip||'').trim() === '1') b.chips++;
+    if((r.RSC||'').trim().toLowerCase() === 'yes') b.rsc++;
+    if(num(r.Playoffs) === 1) b.playoffs++;
+    b.earnings += num(r['Net Profit']);
+  });
+  return Object.values(byName);
+}
+
+function renderStandings(){
+  const data = buildStandings();
+  const totalSeasons = new Set(LEAGUE_DATA.map(r=>r.Year).filter(y=>y)).size;
+  const champCounts = {};
+  data.forEach(d=> champCounts[d.name] = d.chips);
+  const topChamp = data.slice().sort((a,b)=>b.chips-a.chips)[0];
+  const topEarner = data.slice().sort((a,b)=>b.earnings-a.earnings)[0];
+  const topWinPct = data.filter(d=>d.w+d.l>0).slice().sort((a,b)=> (b.w/(b.w+b.l)) - (a.w/(a.w+a.l)))[0];
+
+  document.getElementById('standingsTiles').innerHTML = `
+    <div class="tile"><div class="label">Seasons Tracked</div><div class="value">${totalSeasons}</div></div>
+    <div class="tile"><div class="label">Most Championships</div><div class="value">${topChamp?topChamp.chips:'—'}</div><div class="sub">${topChamp?topChamp.name:''}</div></div>
+    <div class="tile"><div class="label">Career Earnings Leader</div><div class="value">${topEarner?fmtMoney(topEarner.earnings):'—'}</div><div class="sub">${topEarner?topEarner.name:''}</div></div>
+    <div class="tile"><div class="label">Best Career Win%</div><div class="value">${topWinPct? (100*topWinPct.w/(topWinPct.w+topWinPct.l)).toFixed(1)+'%':'—'}</div><div class="sub">${topWinPct?topWinPct.name:''}</div></div>
+  `;
+
+  let sortKey = 'chips', sortDir = -1;
+  function draw(){
+    const rows = data.slice().sort((a,b)=>{
+      const va = sortVal(a), vb = sortVal(b);
+      return va < vb ? -sortDir : va > vb ? sortDir : 0;
+    });
+    function sortVal(d){
+      switch(sortKey){
+        case 'name': return d.name;
+        case 'seasons': return d.seasons;
+        case 'record': return d.w - d.l;
+        case 'winpct': return d.w+d.l>0 ? d.w/(d.w+d.l) : 0;
+        case 'chips': return d.chips;
+        case 'rsc': return d.rsc;
+        case 'playoffs': return d.playoffs;
+        case 'pf': return d.pf;
+        case 'earnings': return d.earnings;
+      }
+    }
+    const tbody = document.querySelector('#standingsTable tbody');
+    tbody.innerHTML = rows.map(d=>`
+      <tr>
+        <td>${d.name}</td>
+        <td>${d.seasons}</td>
+        <td>${d.w}-${d.l}</td>
+        <td>${d.w+d.l>0 ? (100*d.w/(d.w+d.l)).toFixed(1)+'%' : '—'}</td>
+        <td>${d.chips || ''}</td>
+        <td>${d.rsc || ''}</td>
+        <td>${d.playoffs}</td>
+        <td>${d.pf.toLocaleString(undefined,{maximumFractionDigits:0})}</td>
+        <td>${fmtMoney(d.earnings)}</td>
+      </tr>`).join('');
+  }
+  document.querySelectorAll('#standingsTable th').forEach(th=>{
+    th.onclick = ()=>{
+      const key = th.dataset.key;
+      if(sortKey === key) sortDir *= -1; else { sortKey = key; sortDir = -1; }
+      draw();
+    };
+  });
+  draw();
+  document.getElementById('standingsStatus').style.display='none';
+  document.getElementById('standingsTable').style.display='table';
+}
+
+// ---------- Season History ----------
+function renderHistorySeasonList(){
+  const years = [...new Set(LEAGUE_DATA.map(r=>r.Year).filter(y=>y))].sort((a,b)=>b-a);
+  const sel = document.getElementById('yearSelect');
+  sel.innerHTML = years.map(y=>`<option value="${y}">${y}</option>`).join('');
+  sel.addEventListener('change', ()=>renderHistoryYear(sel.value));
+  if(years.length) renderHistoryYear(years[0]);
+}
+
+function renderHistoryYear(year){
+  const rows = LEAGUE_DATA.filter(r=>r.Year === year && r.Team && r.Team.trim() !== '');
+  const tbody = document.querySelector('#historyTable tbody');
+  tbody.innerHTML = rows.slice().sort((a,b)=>num(a['Reg Ranking'])-num(b['Reg Ranking'])).map(r=>`
+    <tr>
+      <td>${r.Name}</td><td>${r.Team}</td><td>${r['Reg Ranking']}</td><td>${r['Reg Win']}</td><td>${r['Reg Loss']}</td>
+      <td>${r.PF}</td><td>${r.PA}</td><td>${r['Playoff Ranking']}</td>
+      <td>${(r.Chip||'').trim()==='1' ? '🏆' : ''}</td>
+      <td>${(r.RSC||'').trim().toLowerCase()==='yes' ? '⭐' : ''}</td>
+      <td>${fmtMoney(num(r['Net Profit']))}</td>
+    </tr>`).join('');
+
+  const tiles = document.getElementById('historyTiles');
+  const summary = findSummaryForYear(year);
+  if(summary){
+    tiles.innerHTML = `
+      <div class="tile"><div class="label">1st Place</div><div class="value" style="font-size:15px;">${summary['1st Place']||'—'}</div></div>
+      <div class="tile"><div class="label">2nd Place</div><div class="value" style="font-size:15px;">${summary['2nd Place']||'—'}</div></div>
+      <div class="tile"><div class="label">3rd Place</div><div class="value" style="font-size:15px;">${summary['3rd Place']||'—'}</div></div>
+      <div class="tile"><div class="label">RSC</div><div class="value" style="font-size:15px;">${summary['RSC']||'—'}</div></div>
+      <div class="tile"><div class="label">Highest Scorer</div><div class="value" style="font-size:15px;">${summary['Highest Scorer']||'—'}</div><div class="sub">${summary['HS Points']||''} pts</div></div>
+    `;
+  } else tiles.innerHTML = '';
+}
+
+function findSummaryForYear(year){
+  // Summary sheet is transposed: first col is a label, subsequent cols are years.
+  if(!SUMMARY_RAW_ROWS.length) return null;
+  const header = SUMMARY_RAW_HEADER;
+  const yearIdx = header.findIndex(h => h.trim() === String(year));
+  if(yearIdx < 0) return null;
+  const out = {};
+  SUMMARY_RAW_ROWS.forEach(r=>{
+    const label = r[0];
+    if(label) out[label] = r[yearIdx];
+  });
+  return out;
+}
+let SUMMARY_RAW_HEADER = [], SUMMARY_RAW_ROWS = [];
+
+// ---------- Awards ----------
+function renderAwards(){
+  const data = buildStandings();
+  const seasonRows = LEAGUE_DATA.filter(r=>r.Team && r.Team.trim() !== '');
+  const bySeasonPPG = seasonRows.map(r=>({
+    name:r.Name, year:r.Year, pf:num(r.PF), games:num(r['Reg Win'])+num(r['Reg Loss'])
+  })).filter(r=>r.games>0).map(r=>({...r, ppg:r.pf/r.games}));
+
+  const topN = (arr, key, n=5) => arr.slice().sort((a,b)=>b[key]-a[key]).slice(0,n);
+
+  function barBlock(title, items, valFmt, nameKey='name', valKey){
+    const max = Math.max(...items.map(i=>i[valKey])) || 1;
+    return `<div class="card"><h3>${title}</h3>` + items.map(i=>`
+      <div class="bar-row">
+        <div class="name">${i[nameKey]}${i.year? ' \''+String(i.year).slice(2):''}</div>
+        <div class="bar-track"><div class="bar-fill" style="width:${(i[valKey]/max*100).toFixed(1)}%"></div></div>
+        <div class="bar-val">${valFmt(i[valKey])}</div>
+      </div>`).join('') + '</div>';
+  }
+
+  const html = [
+    barBlock('Most Championships', topN(data,'chips'), v=>v, 'name', 'chips'),
+    barBlock('Highest Career Win%', topN(data.filter(d=>d.w+d.l>0).map(d=>({...d, winpct: d.w/(d.w+d.l)*100})), 'winpct'), v=>v.toFixed(1)+'%', 'name','winpct'),
+    barBlock('Highest Single-Season PF', topN(seasonRows.map(r=>({name:r.Name, year:r.Year, pf:num(r.PF)})),'pf'), v=>v.toLocaleString(undefined,{maximumFractionDigits:0}), 'name','pf'),
+    barBlock('Best Single-Season PPG', topN(bySeasonPPG,'ppg'), v=>v.toFixed(1), 'name','ppg'),
+    barBlock('Career Earnings', topN(data,'earnings'), v=>fmtMoney(v), 'name','earnings'),
+    barBlock('Most RSC Titles', topN(data,'rsc'), v=>v, 'name','rsc'),
+  ].join('');
+  document.getElementById('awardsGrid').innerHTML = html;
+}
+
+// ---------- Load historical data ----------
+async function loadHistorical(){
+  try{
+    const dataRows = await fetchSheetTab('Data');
+    LEAGUE_DATA = dataRows;
+    renderStandings();
+    renderHistorySeasonList();
+    renderAwards();
+  }catch(err){
+    document.getElementById('standingsStatus').textContent = 'Could not load historical data: ' + err.message;
+    document.getElementById('standingsStatus').classList.add('error');
+  }
+  try{
+    const json = await gvizJsonp('Summary');
+    const rows = gvizTableToRows(json);
+    // The "Summary" tab has a title in physical row 1 ("LEAGUE HISTORY"), which
+    // Google's auto header-detection consumes into table.cols — so table.rows
+    // starts at the real year-header row, not the title row.
+    SUMMARY_RAW_HEADER = rows[0] || [];
+    SUMMARY_RAW_ROWS = rows.slice(1);
+    if(LEAGUE_DATA.length){
+      const sel = document.getElementById('yearSelect');
+      if(sel.value) renderHistoryYear(sel.value);
+    }
+  }catch(err){ /* summary is supplementary; ignore failure */ }
+}
+
+// ---------- What-If Simulator ----------
+let SLEEPER_SEASON_CHAIN = []; // [{leagueId, season}], most recent first
+
+async function buildSleeperChain(){
+  let id = SLEEPER_LEAGUE_ID;
+  const chain = [];
+  for(let i=0;i<15 && id && id !== '0'; i++){
+    let league;
+    try{ league = await fetch(`https://api.sleeper.app/v1/league/${id}`).then(r=>r.json()); }
+    catch(e){ break; }
+    if(!league || !league.league_id) break;
+    chain.push({leagueId: league.league_id, season: league.season});
+    id = league.previous_league_id;
+  }
+  SLEEPER_SEASON_CHAIN = chain;
+  const sel = document.getElementById('simSeason');
+  sel.innerHTML = chain.filter(c=>c.season && c.season < String(new Date().getFullYear()+1))
+    .map(c=>`<option value="${c.leagueId}">${c.season}</option>`).join('');
+  const weekSel = document.getElementById('simWeek');
+  weekSel.innerHTML = Array.from({length:17},(_,i)=>`<option value="${i+1}">Week ${i+1}</option>`).join('');
+}
+
+function computePoints(stats, scoring){
+  if(!stats) return 0;
+  let pts = 0;
+  for(const key in scoring){
+    if(stats[key]) pts += stats[key] * scoring[key];
+  }
+  return pts;
+}
+
+async function runSimulator(){
+  const statusEl = document.getElementById('simStatus');
+  const resultsEl = document.getElementById('simResults');
+  const leagueId = document.getElementById('simSeason').value;
+  const week = document.getElementById('simWeek').value;
+  const chainEntry = SLEEPER_SEASON_CHAIN.find(c=>c.leagueId === leagueId);
+  if(!leagueId){ statusEl.textContent = 'No Sleeper season available yet for this league.'; return; }
+  statusEl.innerHTML = '<span class="spinner"></span> Fetching box scores…';
+  resultsEl.innerHTML = '';
+  try{
+    const [league, users, rosters, matchups, statsRaw] = await Promise.all([
+      fetch(`https://api.sleeper.app/v1/league/${leagueId}`).then(r=>r.json()),
+      fetch(`https://api.sleeper.app/v1/league/${leagueId}/users`).then(r=>r.json()),
+      fetch(`https://api.sleeper.app/v1/league/${leagueId}/rosters`).then(r=>r.json()),
+      fetch(`https://api.sleeper.app/v1/league/${leagueId}/matchups/${week}`).then(r=>r.json()),
+      fetch(`https://api.sleeper.app/v1/stats/nfl/regular/${chainEntry.season}/${week}`).then(r=>r.json()),
+    ]);
+    if(!matchups || !matchups.length){
+      statusEl.textContent = `No box score data for ${chainEntry.season} week ${week} yet.`;
+      return;
+    }
+    const userMap = {}; users.forEach(u=>userMap[u.user_id]=u);
+    const rosterOwner = {}; rosters.forEach(ro=>rosterOwner[ro.roster_id]=ro.owner_id);
+
+    // build custom scoring dict
+    const ppr = parseFloat(document.querySelector('input[name=ppr]:checked').value);
+    const tePremium = document.getElementById('tePremium').checked;
+    const bonus100 = document.getElementById('bonus100').checked;
+    const customScoring = Object.assign({}, league.scoring_settings, {rec: ppr});
+
+    const rows = matchups.map(m=>{
+      const starters = m.starters || [];
+      let actual = 0, custom = 0;
+      starters.forEach(pid=>{
+        const st = statsRaw[pid];
+        actual += (st && st.pts_half_ppr) || 0; // fall back approx; real actual uses league custom points from Sleeper's own calc
+        let c = computePoints(st, customScoring);
+        if(tePremium && st && st.rec) c += st.rec * 0.5;
+        if(bonus100){
+          if(st && st.rush_yd >= 100) c += 3;
+          if(st && st.rec_yd >= 100) c += 3;
+        }
+        custom += c;
+      });
+      const u = userMap[rosterOwner[m.roster_id]] || {};
+      const teamName = (u.metadata && u.metadata.team_name) || u.display_name || `Roster ${m.roster_id}`;
+      return {teamName, actual: m.points || actual, custom};
+    }).sort((a,b)=>b.custom - a.custom);
+
+    const maxVal = Math.max(...rows.map(r=>Math.max(r.actual,r.custom)),1);
+    resultsEl.innerHTML = `<div class="card"><h3>${chainEntry.season} · Week ${week} — Actual vs. What-If</h3>` +
+      rows.map(r=>{
+        const delta = r.custom - r.actual;
+        const badge = delta>=0 ? `<span class="badge good">+${delta.toFixed(1)}</span>` : `<span class="badge crit">${delta.toFixed(1)}</span>`;
+        return `
+        <div class="bar-row">
+          <div class="name">${r.teamName}</div>
+          <div class="bar-track"><div class="bar-fill" style="width:${(r.custom/maxVal*100).toFixed(1)}%;background:var(--s3);"></div></div>
+          <div class="bar-val">${r.custom.toFixed(1)}</div>
+        </div>
+        <div style="font-size:11px;color:var(--muted);margin:-2px 0 8px 158px;">actual: ${r.actual.toFixed(1)} ${badge}</div>
+        `;
+      }).join('') + '</div>';
+    statusEl.textContent = `Showing ${chainEntry.season} week ${week}. "Actual" reflects the league's real scoring rules that week; "What-If" recomputes from raw box scores using the toggles above.`;
+  }catch(err){
+    statusEl.textContent = 'Simulator error: ' + err.message;
+  }
+}
+
+document.getElementById('simRun').addEventListener('click', runSimulator);
+
+// ---------- Init ----------
+loadHistorical();
+buildSleeperChain();
+</script>
+</body>
+</html>
