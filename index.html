@@ -217,6 +217,18 @@ section{padding:38px 0 8px;scroll-margin-top:64px;}
 .ms-opt .swatch{width:10px;height:10px;border-radius:2px;flex:none;}
 .ms-opt.on{color:var(--chalk);}
 
+
+/* ---------------- leaderboard metric picker ----------------
+   Eleven chips wrap to several rows on a phone. Below the desktop breakpoint
+   they collapse into one select; at desktop width the chip row is unchanged. */
+.metric-picker{display:flex;margin-bottom:12px;}
+.metric-picker select{min-width:190px;}
+@media (min-width:1120px){
+  .metric-picker{display:none;}
+}
+@media (max-width:1119px){
+  #metricChips{display:none;}
+}
 /* ---------------- segmented control ----------------
    Visually distinct from the metric chips: one connected pill with a
    sliding thumb, so it reads as "how to draw it" rather than "what to draw". */
@@ -267,6 +279,11 @@ body.nav-open .sidenav{transform:none;}
 .sn-head .crest{width:30px;height:30px;font-size:10px;}
 .sn-head .t{font-size:12.5px;font-weight:700;line-height:1.2;}
 .sn-head .s{font-family:var(--mono);font-size:9px;letter-spacing:1.4px;text-transform:uppercase;color:var(--accent);}
+.sn-home{
+  display:flex !important;align-items:center;gap:9px;font-weight:600;color:var(--chalk) !important;
+  margin-bottom:4px;
+}
+.sn-home.active{color:var(--accent-bright) !important;}
 .sn-group{
   font-family:var(--mono);font-size:9px;letter-spacing:1.6px;text-transform:uppercase;
   color:var(--chalk-mute);padding:12px 10px 5px;
@@ -453,8 +470,8 @@ footer{
 
 @media (max-width:760px){
   .masthead-meta{text-align:left;}
-  .lb-row .nm{width:112px;}
-  .lb-val{width:68px;}
+  .lb-row .nm{width:132px;}   /* fits "Stephanie Sutton" without an ellipsis */
+  .lb-val{width:62px;}
   .mode-toggle{grid-template-columns:1fr;}
   section{padding:28px 0 6px;}
 }
@@ -472,7 +489,7 @@ footer{
   <button type="button" class="mb-menu" id="mobileMenuBtn" aria-label="Open navigation" aria-expanded="false">
     <span class="mb-bars"><i></i><i></i><i></i></span> Menu
   </button>
-  <div class="mb-title" id="mobileBarTitle">Trophy Case</div>
+  <div class="mb-title" id="mobileBarTitle"></div>
 </div>
 
 <nav class="sidenav" id="sideNav">
@@ -568,6 +585,11 @@ footer{
         </div>
       </div>
       <div class="chip-row" id="metricChips"></div>
+      <div class="row metric-picker" id="metricPicker">
+        <label style="font-size:13px;color:var(--chalk-dim);display:flex;align-items:center;gap:9px;">
+          Metric <select id="metricSelect"></select>
+        </label>
+      </div>
       <div class="panel">
         <div id="leaderboardList"></div>
         <div class="chart-wrap" id="leaderboardPie" hidden></div>
@@ -1586,7 +1608,8 @@ const S = {
   records: [], careers: [], careerBy: new Map(), luck: [],
   years: [], completedYears: [], currentYear: null,
   chain: [], sleeperSeasons: [], ownerMap: {}, h2h: null,
-  redraws: []
+  redraws: [],
+  jumpTimers: [], jumpTarget: null   // in-flight nav scroll corrections
 };
 function registerRedraw(fn){ S.redraws.push(fn); }
 window.addEventListener("resize", debounce(()=>S.redraws.forEach(f=>{ try{f();}catch(e){} }), 180));
@@ -1637,6 +1660,8 @@ const CHAPTERS = [
   ["ch-dynasty","Dynasty"], ["ch-rivalries","Rivalries"], ["ch-draft","Draft Grades"],
   ["ch-records","Records"], ["ch-sim","What-If"]
 ];
+const HOME_ID = "__home__";   // sentinel target for the top-of-page link
+
 /* The drawer is the only nav below 1120px and the always-open rail above it,
    so both states are driven from this one list. */
 function setDrawer(open){
@@ -1660,15 +1685,61 @@ function renderChapterNav(){
     if(S.lockNav) S.lockNav(id);
     const t = $(id);
     if(!t) return;
-    /* Sections below can still be filling in, which changes the page height
-       mid-animation and leaves a smooth scroll short of the target. Re-assert
-       the position once layout has settled. */
-    requestAnimationFrame(()=>t.scrollIntoView({behavior:"smooth", block:"start"}));
-    [400, 900].forEach(ms=>setTimeout(()=>{
-      const top = t.getBoundingClientRect().top;
-      if(Math.abs(top) > 80) t.scrollIntoView({behavior:"smooth", block:"start"});
-    }, ms));
+
+    /* Cancel any correction still pending from a previous tap. Without this,
+       tapping B while A's re-assert is queued drags the page back to A and
+       then forward to B — the bounce you get when clicking quickly. */
+    S.jumpTimers.forEach(clearTimeout);
+    S.jumpTimers = [];
+    S.jumpTarget = id;
+
+    t.scrollIntoView({behavior:"smooth", block:"start"});
+
+    /* One late correction, for the case where a section below is still
+       growing and leaves the smooth scroll short of its mark. It waits for
+       the scroll to actually come to rest first — correcting mid-animation
+       would restart it and read as a stutter — and bails out entirely if a
+       newer tap has taken over, if the page cannot scroll any further (the
+       last section can never reach the top), or if it already landed. */
+    let lastY = null, stillFor = 0, polls = 0, corrected = false;
+    const settleCheck = ()=>{
+      if(S.jumpTarget !== id || corrected) return;
+      if(++polls > 20) return;                       // ~2s ceiling
+      const y = window.scrollY;
+      if(y === lastY) stillFor++; else { stillFor = 0; lastY = y; }
+      if(stillFor < 2){                              // still moving
+        S.jumpTimers.push(setTimeout(settleCheck, 100));
+        return;
+      }
+      const atBottom = window.scrollY + window.innerHeight >=
+                       document.documentElement.scrollHeight - 2;
+      if(atBottom) return;
+      if(Math.abs(t.getBoundingClientRect().top) > 90){
+        corrected = true;
+        t.scrollIntoView({behavior:"smooth", block:"start"});
+      }
+    };
+    S.jumpTimers.push(setTimeout(settleCheck, 150));
   };
+
+  /* Home — back to the top of the page from anywhere. */
+  const homeLink = el("a","sn-home","Home");
+  homeLink.href = "#";
+  homeLink.dataset.home = "1";
+  homeLink.addEventListener("click", ev=>{
+    ev.preventDefault();
+    if($("leagueView").hidden){
+      const leagueBtn = document.querySelector('.mode-btn[data-mode="league"]');
+      if(leagueBtn) leagueBtn.click();
+    }
+    if(isDrawerMode()) setDrawer(false);
+    S.jumpTimers.forEach(clearTimeout);
+    S.jumpTimers = [];
+    S.jumpTarget = HOME_ID;
+    if(S.lockNav) S.lockNav(HOME_ID);
+    window.scrollTo({top:0, behavior:"smooth"});
+  });
+  side.appendChild(homeLink);
 
   side.appendChild(el("div","sn-group","League Stats"));
   CHAPTERS.forEach(([id,label])=>{
@@ -1705,16 +1776,30 @@ function renderChapterNav(){
 
   const setActive = (id)=>{
     side.querySelectorAll("a[data-target]").forEach(a=>a.classList.toggle("active", a.dataset.target===id));
-    const label = (CHAPTERS.find(c=>c[0]===id)||[])[1];
-    if(label && $("mobileBarTitle")) $("mobileBarTitle").textContent = label;
+    homeLink.classList.toggle("active", id === HOME_ID);
+    const bar = $("mobileBarTitle");
+    if(bar){
+      // at the top of the page the label adds nothing, so leave it empty
+      if(id === HOME_ID) bar.textContent = "";
+      else {
+        const label = (CHAPTERS.find(c=>c[0]===id)||[])[1];
+        if(label) bar.textContent = label;
+      }
+    }
   };
   /* An explicit tap wins over the scroll-spy for a moment. The last section
      can't always be scrolled to the top of the viewport, so without this the
      spy would immediately relabel it as whatever sits in the band above. */
   const obs = new IntersectionObserver(entries=>{
     if(S.navLockUntil && performance.now() < S.navLockUntil) return;
+    if(window.scrollY < 60){ setActive(HOME_ID); return; }   // parked at the top
     entries.forEach(e=>{ if(e.isIntersecting) setActive(e.target.id); });
   }, {rootMargin:"-64px 0px -70% 0px", threshold:0});
+  // scrolling back to the top by hand should light Home up too
+  window.addEventListener("scroll", ()=>{
+    if(S.navLockUntil && performance.now() < S.navLockUntil) return;
+    if(window.scrollY < 60) setActive(HOME_ID);
+  }, {passive:true});
   CHAPTERS.forEach(([id])=>{ const n=$(id); if(n) obs.observe(n); });
   S.setNavActive = setActive;
   S.lockNav = (id)=>{ S.navLockUntil = performance.now() + 1200; setActive(id); };
@@ -1859,6 +1944,18 @@ const METRICS = [
 let metricKey = "titles";
 let lbView = "bars";
 
+/** Single entry point so the chip row and the picker can never disagree. */
+function setMetric(key){
+  if(!METRICS.some(m=>m.key===key)) return;
+  metricKey = key;
+  const row = $("metricChips");
+  if(row) row.querySelectorAll(".chip").forEach(c=>
+    c.classList.toggle("active", c.dataset.metric === key));
+  const sel = $("metricSelect");
+  if(sel && sel.value !== key) sel.value = key;
+  renderLeaderboard();
+}
+
 /** slide the segmented-control thumb under the active button */
 function moveSegThumb(btn){
   const thumb = $("lbSegThumb");
@@ -1933,13 +2030,17 @@ function initLeaderboard(){
   row.innerHTML = "";
   METRICS.forEach((m,i)=>{
     const c = el("div","chip"+(i===0?" active":""), esc(m.label));
-    c.addEventListener("click", ()=>{
-      metricKey = m.key;
-      row.querySelectorAll(".chip").forEach(x=>x.classList.toggle("active", x===c));
-      renderLeaderboard();
-    });
+    c.dataset.metric = m.key;
+    c.addEventListener("click", ()=>setMetric(m.key));
     row.appendChild(c);
   });
+
+  /* The same options as a picker, shown in place of the chips below the
+     desktop breakpoint. Both stay in sync so a resize never loses state. */
+  const sel = $("metricSelect");
+  sel.innerHTML = METRICS.map(m=>'<option value="'+m.key+'">'+esc(m.label)+"</option>").join("");
+  sel.addEventListener("change", ()=>setMetric(sel.value));
+
   $("lbViewToggle").querySelectorAll("button").forEach(btn=>{
     btn.addEventListener("click", ()=>{
       if(btn.disabled) return;
