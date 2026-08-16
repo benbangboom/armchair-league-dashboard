@@ -53,9 +53,11 @@
   --sans:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
 }
 *{box-sizing:border-box;}
-html{scroll-behavior:smooth;}
+html{scroll-behavior:smooth;overflow-x:clip;}
 body{
   margin:0;
+  max-width:100%;
+  overflow-x:clip;   /* clip, not hidden: keeps position:sticky working */
   background:
     radial-gradient(1200px 600px at 15% -10%, rgba(0,203,167,0.09), transparent 60%),
     radial-gradient(900px 500px at 100% 0%, rgba(92,95,224,0.12), transparent 55%),
@@ -111,22 +113,38 @@ header.masthead{padding:26px 0 16px;border-bottom:1px solid var(--line);}
   border:1px solid rgba(0,203,167,0.45);color:var(--accent-bright);background:rgba(0,203,167,0.12);
 }
 
-/* ---------------- chapter nav ---------------- */
-.chapnav{
-  position:sticky;top:0;z-index:40;margin-top:18px;
-  background:rgba(14,21,33,0.94);backdrop-filter:blur(10px);
-  border-top:1px solid var(--line);border-bottom:1px solid var(--line);
+/* ---------------- mobile top bar (drawer trigger) ----------------
+   Below the desktop breakpoint the outline nav becomes a slide-in drawer.
+   The old horizontally-scrolling strip is gone: it showed ~4 of 12 sections
+   at a time and forced a sideways swipe to find anything. */
+.mobilebar{
+  position:sticky;top:0;z-index:45;display:flex;align-items:center;gap:12px;
+  padding:9px 16px;background:rgba(14,21,33,0.96);backdrop-filter:blur(10px);
+  border-bottom:1px solid var(--line);
 }
-.chapnav-inner{display:flex;gap:2px;overflow-x:auto;padding:8px 0;scrollbar-width:thin;}
-.chapnav-inner::-webkit-scrollbar{height:5px;}
-.chapnav-inner::-webkit-scrollbar-thumb{background:var(--line-strong);border-radius:3px;}
-.chapnav button{
-  white-space:nowrap;background:transparent;border:1px solid transparent;color:var(--chalk-dim);
-  padding:7px 13px;border-radius:8px;font-size:12.5px;cursor:pointer;font-family:var(--sans);
-  transition:background .12s,color .12s;
+.mb-menu{
+  display:flex;align-items:center;justify-content:center;gap:8px;flex:none;
+  background:var(--panel-2);border:1px solid var(--line-strong);color:var(--chalk);
+  border-radius:10px;padding:9px 13px;cursor:pointer;font-family:var(--sans);
+  font-size:13px;font-weight:600;min-height:42px;
 }
-.chapnav button:hover{background:rgba(255,255,255,0.06);color:var(--chalk);}
-.chapnav button.active{background:var(--accent);color:var(--accent-ink);font-weight:700;border-color:var(--accent);}
+.mb-menu:active{background:var(--panel-3);}
+.mb-bars{display:inline-flex;flex-direction:column;gap:3px;}
+.mb-bars i{display:block;width:15px;height:2px;background:var(--accent);border-radius:2px;}
+.mb-title{
+  font-size:14px;font-weight:700;color:var(--chalk);overflow:hidden;
+  text-overflow:ellipsis;white-space:nowrap;min-width:0;
+}
+.nav-backdrop{
+  position:fixed;inset:0;z-index:49;background:rgba(0,0,0,0.6);
+  opacity:0;pointer-events:none;transition:opacity .2s;
+}
+body.nav-open .nav-backdrop{opacity:1;pointer-events:auto;}
+.sn-close{
+  margin-left:auto;background:transparent;border:none;color:var(--chalk-dim);
+  font-size:22px;line-height:1;cursor:pointer;padding:4px 6px;border-radius:8px;
+}
+.sn-close:hover{color:var(--chalk);background:rgba(255,255,255,0.06);}
 
 /* ---------------- mode toggle ---------------- */
 .mode-toggle{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:22px 0 4px;}
@@ -227,16 +245,22 @@ section{padding:38px 0 8px;scroll-margin-top:64px;}
   margin-top:6px;text-align:right;white-space:nowrap;
 }
 @media (max-width:700px){
-  .section-head.row{flex-direction:column;}
+  .section-head.row{flex-direction:column;gap:12px;}
+  /* flex-basis is measured on the main axis — once stacked, the 320px meant
+     for width would become 320px of height and leave a blank gap. */
+  .section-head.row > div:first-child{flex:0 0 auto;}
   .seg-hint{text-align:left;}
 }
 
 /* ---------------- left outline nav ---------------- */
 .sidenav{
-  display:none;position:fixed;left:0;top:0;bottom:0;width:214px;z-index:50;
-  background:rgba(11,17,27,0.98);border-right:1px solid var(--line);
+  position:fixed;left:0;top:0;bottom:0;width:270px;z-index:55;
+  background:#0b111b;border-right:1px solid var(--line);
   overflow-y:auto;padding:16px 10px 28px;scrollbar-width:thin;
+  transform:translateX(-100%);transition:transform .22s cubic-bezier(.4,0,.2,1);
+  will-change:transform;
 }
+body.nav-open .sidenav{transform:none;}
 .sidenav::-webkit-scrollbar{width:6px;}
 .sidenav::-webkit-scrollbar-thumb{background:var(--line-strong);border-radius:3px;}
 .sn-head{display:flex;align-items:center;gap:9px;padding:4px 8px 14px;border-bottom:1px solid var(--line);margin-bottom:8px;}
@@ -248,8 +272,8 @@ section{padding:38px 0 8px;scroll-margin-top:64px;}
   color:var(--chalk-mute);padding:12px 10px 5px;
 }
 .sidenav a{
-  display:block;padding:6.5px 10px;border-radius:7px;color:var(--chalk-dim);
-  text-decoration:none;font-size:12.5px;border-left:2px solid transparent;
+  display:block;padding:12px 12px;border-radius:8px;color:var(--chalk-dim);
+  text-decoration:none;font-size:15px;border-left:2px solid transparent;
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
 }
 .sidenav a:hover{background:rgba(255,255,255,0.06);color:var(--chalk);}
@@ -258,14 +282,18 @@ section{padding:38px 0 8px;scroll-margin-top:64px;}
   border-left-color:var(--accent);font-weight:600;
 }
 @media (min-width:1120px){
-  .sidenav{display:block;}
+  /* desktop is unchanged: the drawer is simply always open and in-flow */
+  .sidenav{transform:none;width:214px;z-index:50;background:rgba(11,17,27,0.98);}
+  .sidenav a{padding:6.5px 10px;font-size:12.5px;border-radius:7px;}
   body{padding-left:214px;}
-  .chapnav{display:none;}
+  .mobilebar{display:none;}
+  .nav-backdrop{display:none;}
+  .sn-close{display:none;}
   section{scroll-margin-top:24px;}
 }
 
 /* ---------------- tables ---------------- */
-.table-scroll{overflow-x:auto;}
+.table-scroll{overflow-x:auto;max-width:100%;-webkit-overflow-scrolling:touch;overscroll-behavior-x:contain;}
 table{width:100%;border-collapse:collapse;font-size:13px;}
 thead th{
   text-align:left;padding:10px 11px;font-family:var(--mono);font-size:10px;letter-spacing:1.3px;
@@ -297,7 +325,8 @@ td.num,th.num{text-align:right;}
 .neg{color:var(--neg-bright);}
 
 /* ---------------- trophy case ---------------- */
-.trophy-scroll{display:flex;gap:12px;overflow-x:auto;padding:4px 2px 14px;scroll-snap-type:x mandatory;}
+.trophy-scroll{display:flex;gap:12px;overflow-x:auto;max-width:100%;padding:4px 2px 14px;
+  scroll-snap-type:x mandatory;-webkit-overflow-scrolling:touch;overscroll-behavior-x:contain;}
 .trophy-scroll::-webkit-scrollbar{height:7px;}
 .trophy-scroll::-webkit-scrollbar-thumb{background:var(--line-strong);border-radius:4px;}
 .trophy{
@@ -331,8 +360,8 @@ td.num,th.num{text-align:right;}
 .rcard .line .v{font-family:var(--mono);color:var(--chalk);white-space:nowrap;font-variant-numeric:tabular-nums;}
 
 /* ---------------- charts ---------------- */
-.chart-wrap{position:relative;width:100%;}
-svg.chart{display:block;width:100%;height:auto;overflow:visible;}
+.chart-wrap{position:relative;width:100%;max-width:100%;overflow:hidden;}
+svg.chart{display:block;width:100%;max-width:100%;height:auto;overflow:hidden;}
 svg.chart text{font-family:var(--sans);}
 .axis-label{fill:var(--chalk-mute);font-size:10.5px;}
 .axis-label.mono{font-family:var(--mono);}
@@ -354,7 +383,7 @@ svg.chart text{font-family:var(--sans);}
 .tooltip .tt-row .v{margin-left:auto;font-family:var(--mono);color:var(--chalk);padding-left:12px;font-variant-numeric:tabular-nums;}
 
 /* ---------------- H2H grid ---------------- */
-.h2h-scroll{overflow-x:auto;}
+.h2h-scroll{overflow-x:auto;max-width:100%;-webkit-overflow-scrolling:touch;overscroll-behavior-x:contain;}
 table.h2h{border-collapse:separate;border-spacing:2px;font-size:11.5px;}
 table.h2h th{padding:5px 6px;font-family:var(--mono);font-size:9.5px;letter-spacing:0.6px;color:var(--chalk-mute);
   text-transform:uppercase;border:none;white-space:nowrap;}
@@ -430,18 +459,27 @@ footer{
   section{padding:28px 0 6px;}
 }
 @media print{
-  .chapnav,.mode-toggle{display:none;}
+  .mobilebar,.mode-toggle,.sidenav{display:none;}
   body{background:#fff;color:#000;}
 }
 </style>
 </head>
 <body>
 <div class="field-lines"></div>
+<div class="nav-backdrop" id="navBackdrop"></div>
+
+<div class="mobilebar" id="mobileBar">
+  <button type="button" class="mb-menu" id="mobileMenuBtn" aria-label="Open navigation" aria-expanded="false">
+    <span class="mb-bars"><i></i><i></i><i></i></span> Menu
+  </button>
+  <div class="mb-title" id="mobileBarTitle">Trophy Case</div>
+</div>
 
 <nav class="sidenav" id="sideNav">
   <div class="sn-head">
     <div class="crest">AFL</div>
     <div><div class="t">Arm Chair League</div></div>
+    <button type="button" class="sn-close" id="sideNavClose" aria-label="Close navigation">&times;</button>
   </div>
   <div id="sideNavList"></div>
 </nav>
@@ -471,9 +509,6 @@ footer{
   </section>
 </div>
 
-<nav class="chapnav" id="chapNav">
-  <div class="wrap"><div class="chapnav-inner" id="chapNavInner"></div></div>
-</nav>
 
 <div class="wrap">
   <div class="mode-toggle" id="modeToggle">
@@ -494,14 +529,18 @@ footer{
 
     <section id="ch-standings">
       <div class="section-head">
-        <h3>Standings Explorer</h3>
+        <h3>Season Standings</h3>
         <p>Full final standings, season by season — toggle between regular-season order and how it actually finished.</p>
+      </div>
+      <div class="row" style="margin-bottom:12px;">
+        <label style="font-size:13px;color:var(--chalk-dim);display:flex;align-items:center;gap:9px;">
+          Season <select id="yearSelect"></select>
+        </label>
       </div>
       <div class="chip-row" id="viewChips">
         <div class="chip active" data-view="playoff">Playoff Finish</div>
         <div class="chip" data-view="regular">Regular Season</div>
       </div>
-      <div class="chip-row" id="yearChips"></div>
       <div class="panel tight">
         <div class="table-scroll">
           <table id="standingsTable">
@@ -1162,7 +1201,9 @@ function lineChart(container, series, opts){
   opts = opts||{};
   container.innerHTML = "";
   const W = Math.max(320, container.clientWidth || 640);
-  const labelRoom = opts.directLabels === false ? 16 : 108;
+  // give the plot more of a narrow screen while still fitting the end labels
+  const labelRoom = opts.directLabels === false ? 16
+                  : Math.max(58, Math.min(108, Math.round(W * 0.22)));
   const H = opts.height || 380;
   const M = {t:16, r:labelRoom, b:34, l:56};
   const iw = W - M.l - M.r, ih = H - M.t - M.b;
@@ -1189,10 +1230,22 @@ function lineChart(container, series, opts){
     tx.textContent = opts.yFmt ? opts.yFmt(t) : t.toLocaleString();
     svg.appendChild(tx);
   });
+  /* Thin the year ticks by measured pixel spacing rather than a fixed step:
+     on a narrow phone a fixed step still let the last two labels collide. */
   const years = [...new Set(xs)].sort((a,b)=>a-b);
-  const stepX = years.length>9 ? 2 : 1;
-  years.forEach((yr,i)=>{
-    if(i % stepX !== 0 && i !== years.length-1) return;
+  const MIN_TICK_GAP = 44;
+  const ticks = [];
+  let lastX = -Infinity;
+  years.forEach(yr=>{
+    if(X(yr) - lastX >= MIN_TICK_GAP){ ticks.push(yr); lastX = X(yr); }
+  });
+  const lastYear = years[years.length-1];
+  if(ticks[ticks.length-1] !== lastYear){
+    // always show the most recent season, dropping the prior tick if it'd crowd
+    if(ticks.length && X(lastYear) - X(ticks[ticks.length-1]) < MIN_TICK_GAP) ticks.pop();
+    ticks.push(lastYear);
+  }
+  ticks.forEach(yr=>{
     const t = svgEl("text",{class:"axis-label mono",x:X(yr),y:M.t+ih+20,"text-anchor":"middle"});
     t.textContent = yr;
     svg.appendChild(t);
@@ -1259,6 +1312,22 @@ function lineChart(container, series, opts){
   container.appendChild(svg);
 }
 
+/** Shrink a name to fit `maxPx` of gutter: "Benjamin Carlson" -> "B. Carlson". */
+function fitLabel(text, maxPx){
+  const CHAR = 5.6;                       // ~10.5px system sans, average glyph
+  const fits = s => s.length * CHAR <= maxPx;
+  let s = String(text||"");
+  if(fits(s)) return s;
+  const parts = s.split(/\s+/).filter(Boolean);
+  if(parts.length > 1){
+    const abbrev = parts[0][0] + ". " + parts.slice(1).join(" ");
+    if(fits(abbrev)) return abbrev;
+    s = abbrev;
+  }
+  const room = Math.max(3, Math.floor(maxPx / CHAR) - 1);
+  return s.length > room ? s.slice(0, room) + "…" : s;
+}
+
 /**
  * Horizontal bar chart. Diverging (green/red by sign) when opts.diverging.
  * items: [{label, value, color?, sub?}]
@@ -1280,10 +1349,22 @@ function barChart(container, items, opts){
   const X = v => M.l + (v-vMin)/(vMax-vMin)*iw;
 
   const svg = svgEl("svg",{class:"chart",width:W,height:H,viewBox:"0 0 "+W+" "+H});
-  niceTicks(vMin,vMax,4).forEach(t=>{
+
+  /* Thin the value ticks so their text cannot overlap on a narrow chart.
+     Width is estimated from the formatted string — the mono axis font runs
+     about 6px per character at 10.5px. */
+  const tickCandidates = niceTicks(vMin,vMax,4);
+  const tickText = t => opts.vFmt ? opts.vFmt(t) : t.toLocaleString();
+  let lastTickRight = -Infinity;
+  tickCandidates.forEach(t=>{
+    const label = String(tickText(t));
+    const halfW = label.length * 3;
+    const left  = X(t) - halfW;
+    if(left < lastTickRight + 8) return;          // would touch the previous tick
+    lastTickRight = X(t) + halfW;
     svg.appendChild(svgEl("line",{class:"gridline",x1:X(t),x2:X(t),y1:M.t,y2:M.t+ih}));
     const tx = svgEl("text",{class:"axis-label mono",x:X(t),y:H-8,"text-anchor":"middle"});
-    tx.textContent = opts.vFmt?opts.vFmt(t):t.toLocaleString();
+    tx.textContent = label;
     svg.appendChild(tx);
   });
   const zeroX = X(0);
@@ -1296,8 +1377,11 @@ function barChart(container, items, opts){
     const x0 = v>=0 ? zeroX : X(v);
     const w  = Math.max(2, Math.abs(X(v)-zeroX));
     const col = it.color || (opts.diverging ? (v>=0 ? "var(--pos)" : "var(--neg)") : SERIES[0]);
+    /* The gutter is a fixed share of the chart, so on a phone a full name
+       would run past the left edge and get clipped. Abbreviate the forename
+       first, then truncate, so the label always fits its lane. */
     const lab = svgEl("text",{class:"axis-label",x:M.l-10,y:y+h/2+4,"text-anchor":"end",fill:"var(--chalk-dim)"});
-    lab.textContent = it.label;
+    lab.textContent = fitLabel(it.label, M.l - 14);
     svg.appendChild(lab);
     const rect = svgEl("rect",{x:x0,y:y,width:w,height:h,rx:4,fill:col});
     rect.style.cursor = "default";
@@ -1391,7 +1475,9 @@ function scatterChart(container, points, opts){
 function pieChart(container, items, opts){
   opts = opts||{};
   container.innerHTML = "";
-  const maxSlices = opts.maxSlices || 6;
+  /* maxSlices is opt-in. Left unset, every entry keeps its own wedge and its
+     own colour rather than being swept into a grey "Other". */
+  const maxSlices = opts.maxSlices || Infinity;
   const clean = items.filter(i=>i.value > 0).sort((a,b)=>b.value-a.value);
   if(!clean.length){ container.appendChild(el("div","status","Nothing to chart for this metric.")); return []; }
 
@@ -1450,9 +1536,10 @@ function pieChart(container, items, opts){
     path.addEventListener("mouseleave", ()=>TT.hide());
     svg.appendChild(path);
 
-    /* Direct label on any slice big enough to carry one — identity is never
-       colour alone. Smaller wedges rely on the legend + hover. */
-    if(frac >= 0.05){
+    /* Direct label on any slice big enough to carry one without colliding
+       with its neighbours. Thin wedges are covered by the legend, which
+       carries every name AND its value, plus hover. */
+    if(frac >= 0.045){
       const [lx,ly] = P(rOut + 16, mid);
       const right = Math.cos(mid) >= 0;
       const t = svgEl("text",{class:"series-label", x:lx, y:ly+4,
@@ -1486,7 +1573,8 @@ function legendFor(container, items){
   container.innerHTML = "";
   items.forEach(i=>{
     const d = el("div","item");
-    d.innerHTML = '<span class="swatch" style="background:'+i.color+'"></span>'+esc(i.name);
+    d.innerHTML = '<span class="swatch" style="background:'+i.color+'"></span>'+esc(i.name)+
+      (i.value != null ? ' <b style="color:var(--chalk);font-variant-numeric:tabular-nums;">'+esc(i.value)+"</b>" : "");
     container.appendChild(d);
   });
 }
@@ -1549,28 +1637,41 @@ const CHAPTERS = [
   ["ch-dynasty","Dynasty"], ["ch-rivalries","Rivalries"], ["ch-draft","Draft Grades"],
   ["ch-records","Records"], ["ch-sim","What-If"]
 ];
+/* The drawer is the only nav below 1120px and the always-open rail above it,
+   so both states are driven from this one list. */
+function setDrawer(open){
+  document.body.classList.toggle("nav-open", !!open);
+  const btn = $("mobileMenuBtn");
+  if(btn) btn.setAttribute("aria-expanded", open ? "true" : "false");
+}
+function isDrawerMode(){ return !window.matchMedia("(min-width:1120px)").matches; }
+
 function renderChapterNav(){
-  const inner = $("chapNavInner");
-  const side  = $("sideNavList");
-  inner.innerHTML = ""; side.innerHTML = "";
+  const side = $("sideNavList");
+  side.innerHTML = "";
 
   /* jump to a league section, switching out of manager mode first if needed */
   const jumpTo = (id)=>{
-    if(!$("leagueView").hidden === false || $("leagueView").hidden){
+    if($("leagueView").hidden){
       const leagueBtn = document.querySelector('.mode-btn[data-mode="league"]');
-      if(leagueBtn && $("leagueView").hidden) leagueBtn.click();
+      if(leagueBtn) leagueBtn.click();
     }
+    if(isDrawerMode()) setDrawer(false);
+    if(S.lockNav) S.lockNav(id);
     const t = $(id);
-    if(t) requestAnimationFrame(()=>t.scrollIntoView({behavior:"smooth", block:"start"}));
+    if(!t) return;
+    /* Sections below can still be filling in, which changes the page height
+       mid-animation and leaves a smooth scroll short of the target. Re-assert
+       the position once layout has settled. */
+    requestAnimationFrame(()=>t.scrollIntoView({behavior:"smooth", block:"start"}));
+    [400, 900].forEach(ms=>setTimeout(()=>{
+      const top = t.getBoundingClientRect().top;
+      if(Math.abs(top) > 80) t.scrollIntoView({behavior:"smooth", block:"start"});
+    }, ms));
   };
 
   side.appendChild(el("div","sn-group","League Stats"));
   CHAPTERS.forEach(([id,label])=>{
-    const b = el("button", null, esc(label));
-    b.dataset.target = id;
-    b.addEventListener("click", ()=>jumpTo(id));
-    inner.appendChild(b);
-
     const a = el("a", null, esc(label));
     a.href = "#"+id;
     a.dataset.target = id;
@@ -1586,19 +1687,37 @@ function renderChapterNav(){
     ev.preventDefault();
     const btn = document.querySelector('.mode-btn[data-mode="manager"]');
     if(btn) btn.click();
+    if(isDrawerMode()) setDrawer(false);
     window.scrollTo({top:0, behavior:"smooth"});
   });
   side.appendChild(mgrLink);
 
+  // drawer open/close wiring
+  $("mobileMenuBtn").addEventListener("click", ev=>{
+    ev.stopPropagation();
+    setDrawer(!document.body.classList.contains("nav-open"));
+  });
+  $("sideNavClose").addEventListener("click", ()=>setDrawer(false));
+  $("navBackdrop").addEventListener("click", ()=>setDrawer(false));
+  document.addEventListener("keydown", ev=>{ if(ev.key === "Escape") setDrawer(false); });
+  // a resize up into desktop must not leave the body in the open state
+  window.addEventListener("resize", debounce(()=>{ if(!isDrawerMode()) setDrawer(false); }, 150));
+
   const setActive = (id)=>{
-    inner.querySelectorAll("button").forEach(b=>b.classList.toggle("active", b.dataset.target===id));
     side.querySelectorAll("a[data-target]").forEach(a=>a.classList.toggle("active", a.dataset.target===id));
+    const label = (CHAPTERS.find(c=>c[0]===id)||[])[1];
+    if(label && $("mobileBarTitle")) $("mobileBarTitle").textContent = label;
   };
+  /* An explicit tap wins over the scroll-spy for a moment. The last section
+     can't always be scrolled to the top of the viewport, so without this the
+     spy would immediately relabel it as whatever sits in the band above. */
   const obs = new IntersectionObserver(entries=>{
+    if(S.navLockUntil && performance.now() < S.navLockUntil) return;
     entries.forEach(e=>{ if(e.isIntersecting) setActive(e.target.id); });
   }, {rootMargin:"-64px 0px -70% 0px", threshold:0});
   CHAPTERS.forEach(([id])=>{ const n=$(id); if(n) obs.observe(n); });
   S.setNavActive = setActive;
+  S.lockNav = (id)=>{ S.navLockUntil = performance.now() + 1200; setActive(id); };
 }
 
 /* ---------- 01 trophy case ---------- */
@@ -1688,18 +1807,22 @@ function renderStandings(){
     : "";
 }
 function initStandings(){
-  const yc = $("yearChips");
-  yc.innerHTML = "";
-  [...S.years].reverse().forEach(y=>{
-    const c = el("div","chip", String(y));
-    c.dataset.year = y;
-    c.addEventListener("click", ()=>{
-      standingsState.year = y;
-      yc.querySelectorAll(".chip").forEach(x=>x.classList.toggle("active", x===c));
-      renderStandings();
-    });
-    yc.appendChild(c);
+  /* Fourteen year chips wrapped over two rows and pushed the table down the
+     page; a single picker keeps the section compact and gives phones the
+     native wheel selector. */
+  const sel = $("yearSelect");
+  const years = [...S.years].reverse();
+  const defYear = S.completedYears[S.completedYears.length-1];
+  sel.innerHTML = years.map(y=>{
+    const done = S.records.some(r=>r.year===y && (r.played || r.champ));
+    return '<option value="'+y+'"'+(y===defYear?" selected":"")+">"+y+
+           (done ? "" : " (in progress)")+"</option>";
+  }).join("");
+  sel.addEventListener("change", ()=>{
+    standingsState.year = Number(sel.value);
+    renderStandings();
   });
+
   $("viewChips").querySelectorAll(".chip").forEach(c=>{
     c.addEventListener("click", ()=>{
       standingsState.view = c.dataset.view;
@@ -1707,10 +1830,9 @@ function initStandings(){
       renderStandings();
     });
   });
-  const defYear = S.completedYears[S.completedYears.length-1];
+
   standingsState.year = defYear;
-  const target = yc.querySelector('[data-year="'+defYear+'"]');
-  if(target) target.classList.add("active");
+  sel.value = String(defYear);
   renderStandings();
 }
 
@@ -1773,10 +1895,12 @@ function renderLeaderboard(){
   $("leaderboardPieLegend").hidden = !showPie;
 
   if(showPie){
+    // no maxSlices: every manager keeps their own wedge and their own colour
     const slices = pieChart($("leaderboardPie"),
       sorted.map(c=>({label: displayName(c.owner), owner:c.owner, value:c[m.key], color:c.color})),
-      {height:400, vFmt:m.fmt, metricName:m.label, totalLabel:"LEAGUE TOTAL", maxSlices:6});
-    legendFor($("leaderboardPieLegend"), slices.map(s=>({name:s.label, color:s.color})));
+      {height:430, vFmt:m.fmt, metricName:m.label, totalLabel:"LEAGUE TOTAL"});
+    legendFor($("leaderboardPieLegend"),
+      slices.map(s=>({name:s.label, color:s.color, value:m.fmt(s.value)})));
   } else {
     const vals = sorted.map(c=>c[m.key]);
     const max = Math.max.apply(null, vals.map(Math.abs).concat([1]));
@@ -1794,7 +1918,7 @@ function renderLeaderboard(){
   const notes = [];
   notes.push(m.min>0 ? "Managers with at least one full season logged."
     : "All managers on record, including the 2013–15 champions whose full season stats predate the record book.");
-  if(showPie) notes.push("Each slice is sized by its share of the league total and labelled with the same value as the bar view; past six managers the rest are grouped as Other.");
+  if(showPie) notes.push("Every manager gets their own slice, sized by share of the league total and labelled with the same value as the bar view. Thin slices are labelled in the legend below rather than on the chart.");
   if(!canPie) notes.push("No pie for this one — "+
     (m.diverging ? "these values can be negative and cancel out, so a share of the total has no meaning."
                  : "this is a per-game or percentage rate, not a quantity that adds up to a league total."));
@@ -2336,6 +2460,16 @@ async function initSleeperChapters(){
     if(!done.length){
       $("draftStatus").textContent = "No completed Sleeper season yet.";
       $("simStatus").textContent   = "No completed Sleeper season yet.";
+    } else {
+      /* Populate both on-demand chapters as soon as the season list is known,
+         so neither reads as an empty section that needs a button pressed to
+         prove it works. Deliberately NOT gated on scrolling into view: these
+         sections grow the page as they fill, which cuts a smooth-scroll short
+         and can leave the trigger never firing. The weekly matchups are
+         already warm in the cache from the head-to-head pass above, so this
+         costs roughly a dozen extra stat requests. */
+      runDraftGrades();
+      runSimulator();
     }
     // re-render manager profile so the H2H card appears
     const cur = $("mgrSelect") && $("mgrSelect").value;
@@ -2551,18 +2685,36 @@ async function runSimulator(){
     rows.forEach(r=>{ r.delta = r.custom - r.actual; r.winDelta = r.cw - r.w; });
     rows.sort((a,b)=>b.custom-a.custom);
 
-    /* Polarity encoding again — gained or lost points under the new rules.
-       The chart is about the swing, so it sorts by delta; the table below
-       keeps what-if order because that is the new standings. */
-    const items = [...rows].sort((a,b)=>b.delta-a.delta).map(r=>({
-      label: displayName(r.owner), value: Math.round(r.delta*10)/10,
-      sub: "Actual "+r.actual.toFixed(1)+" → what-if "+r.custom.toFixed(1)
-    }));
+    /* With the league's own rules selected every delta is zero by definition,
+       which would render as a meaningless row of empty bars. Detect that and
+       show the actual scoring as a baseline instead, so the chart is useful
+       before the reader has touched a toggle. */
+    const biggestSwing = Math.max.apply(null, rows.map(r=>Math.abs(r.delta)));
+    const isBaseline = biggestSwing < 0.05;
+
+    const items = isBaseline
+      ? [...rows].sort((a,b)=>b.actual-a.actual).map(r=>({
+          label: displayName(r.owner), value: Math.round(r.actual*10)/10,
+          color: S.careerBy.get(r.owner) ? S.careerBy.get(r.owner).color : "#3987e5",
+          sub: "Record "+r.w+"-"+r.l
+        }))
+      : [...rows].sort((a,b)=>b.delta-a.delta).map(r=>({
+          label: displayName(r.owner), value: Math.round(r.delta*10)/10,
+          sub: "Actual "+r.actual.toFixed(1)+" → what-if "+r.custom.toFixed(1)
+        }));
 
     out.innerHTML =
       '<div class="panel" style="margin-bottom:12px;">'+
+        (isBaseline
+          ? '<p class="note" style="margin:0 0 12px;color:var(--chalk-dim);font-family:var(--sans);font-size:13px;">'+
+            "<b>These are the league's real rules, so nothing changes yet.</b> "+
+            "Below is what everyone actually scored. Flip any toggle above and hit Recalculate "+
+            "to see who the rule change would have helped.</p>"
+          : "")+
         '<div class="chart-wrap" id="simChart"></div>'+
-        '<p class="note">Bars show points gained or lost under the new rules across the selected span.</p>'+
+        '<p class="note">'+(isBaseline
+          ? "Bars show actual points scored under the league's current rules."
+          : "Bars show points gained or lost under the new rules across the selected span.")+"</p>"+
       "</div>"+
       '<div class="panel tight"><div class="table-scroll"><table><thead><tr>'+
         "<th>Manager</th><th class='num'>Actual pts</th><th class='num'>What-if pts</th>"+
@@ -2574,7 +2726,9 @@ async function runSimulator(){
           (c?c.color:"#888")+"'></span>"+esc(displayName(r.owner))+"</div></td>"+
           "<td class='num'>"+r.actual.toFixed(1)+"</td>"+
           "<td class='num'>"+r.custom.toFixed(1)+"</td>"+
-          "<td class='num "+(r.delta>=0?"pos":"neg")+"'>"+signed(r.delta)+"</td>"+
+          // sub-0.05 swings are float noise from re-deriving identical scoring
+          "<td class='num "+(Math.abs(r.delta)<0.05?"":(r.delta>0?"pos":"neg"))+"'>"+
+            (Math.abs(r.delta)<0.05 ? "—" : signed(r.delta))+"</td>"+
           "<td class='num'>"+r.w+"-"+r.l+"</td>"+
           "<td class='num'>"+r.cw+"-"+r.cl+"</td>"+
           "<td class='num "+(r.winDelta>0?"pos":r.winDelta<0?"neg":"")+"'>"+
@@ -2582,12 +2736,15 @@ async function runSimulator(){
       }).join("")+
       "</tbody></table></div></div>";
 
-    barChart($("simChart"), items, {diverging:true, vFmt:v=>signed(v,0), metricName:"Point swing", rowH:31});
+    barChart($("simChart"), items, isBaseline
+      ? {vFmt:v=>v.toLocaleString(undefined,{maximumFractionDigits:0}), metricName:"Points scored", rowH:31}
+      : {diverging:true, vFmt:v=>signed(v,0), metricName:"Point swing", rowH:31});
 
     const notes = [];
     if(tePremium) notes.push("the reception bonus is applied to every reception (Sleeper's weekly stat feed has no position field), so treat it as a league-wide PPR bump rather than TE-only");
     st.className = "status";
     st.textContent = lg.season+" · "+counted+" head-to-head matchups re-scored"+
+      (isBaseline ? " at the league's current rules (baseline)" : "")+
       (notes.length ? ". Note: "+notes.join("; ")+"." : ".");
   }catch(err){
     st.className = "status error";
@@ -2606,7 +2763,9 @@ function initModeToggle(){
     const mgr = btn.dataset.mode === "manager";
     $("leagueView").hidden  = mgr;
     $("managerView").hidden = !mgr;
-    $("chapNav").style.display = mgr ? "none" : "";
+    /* The bar stays put in manager mode — it holds the only Menu button on
+       mobile, so hiding it would strand the user with no way back. */
+    if(mgr) $("mobileBarTitle").textContent = "Manager Profiles";
     // keep the outline nav in step with the mode
     const side = $("sideNavList");
     side.querySelectorAll("a[data-target]").forEach(a=>a.classList.toggle("active", false));
@@ -2660,6 +2819,9 @@ async function boot(){
   // Sleeper-backed chapters load after the history is on screen
   $("draftRun").addEventListener("click", runDraftGrades);
   $("simRun").addEventListener("click", runSimulator);
+  // placeholders until the Sleeper chain resolves and the auto-run kicks in
+  $("simStatus").innerHTML   = '<span class="spinner"></span>Loading the most recent season…';
+  $("draftStatus").innerHTML = '<span class="spinner"></span>Loading the most recent draft…';
   $("simScope").addEventListener("change", ()=>{
     $("simWeekLabel").hidden = $("simScope").value !== "week";
   });
