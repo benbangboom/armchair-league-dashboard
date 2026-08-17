@@ -155,6 +155,18 @@ body.nav-open .nav-backdrop{opacity:1;pointer-events:auto;}
 .mode-btn:hover{background:var(--panel-2);color:var(--chalk);}
 .mode-btn.active{border-color:var(--accent);color:var(--accent-bright);background:rgba(0,203,167,0.10);}
 
+/* ---------------- roster filter ---------------- */
+.roster-filter{
+  display:flex;align-items:center;gap:14px;flex-wrap:wrap;
+  margin:14px 0 4px;
+}
+.roster-note{font-family:var(--mono);font-size:11px;color:var(--chalk-mute);}
+@media (max-width:700px){
+  .roster-filter{gap:8px;}
+  .roster-filter .segmented{width:100%;}
+  .roster-filter .segmented button{flex:1;padding:9px 12px;}
+}
+
 /* ---------------- sections ---------------- */
 section{padding:38px 0 8px;scroll-margin-top:64px;}
 .section-head{margin-bottom:16px;}
@@ -531,6 +543,15 @@ footer{
   <div class="mode-toggle" id="modeToggle">
     <div class="mode-btn active" data-mode="league">League Stats</div>
     <div class="mode-btn" data-mode="manager">Manager Profiles</div>
+  </div>
+
+  <div class="roster-filter" id="rosterFilter">
+    <div class="segmented" id="rosterToggle">
+      <span class="seg-thumb" id="rosterSegThumb"></span>
+      <button type="button" data-roster="all" class="active">Complete history</button>
+      <button type="button" data-roster="current">Current league</button>
+    </div>
+    <div class="roster-note" id="rosterNote"></div>
   </div>
 
   <!-- ==================== LEAGUE VIEW ==================== -->
@@ -1609,8 +1630,31 @@ const S = {
   years: [], completedYears: [], currentYear: null,
   chain: [], sleeperSeasons: [], ownerMap: {}, h2h: null,
   redraws: [],
-  jumpTimers: [], jumpTarget: null   // in-flight nav scroll corrections
+  jumpTimers: [], jumpTarget: null,  // in-flight nav scroll corrections
+  rosterFilter: "all",               // "all" | "current"
+  currentRoster: new Set()           // managers on the newest roster in the sheet
 };
+
+/* Who is still in the league: everyone listed in the most recent season the
+   sheet has rows for. Derived rather than hard-coded, so it follows the sheet
+   as managers come and go. */
+function deriveCurrentRoster(records){
+  const years = [...new Set(records.map(r=>r.year))].sort((a,b)=>b-a);
+  for(const y of years){
+    const names = records.filter(r=>r.year===y).map(r=>r.owner);
+    if(names.length) return new Set(names);
+  }
+  return new Set();
+}
+/** Careers passing the active roster filter, in their fixed colour order. */
+function visibleCareers(){
+  return S.rosterFilter === "current"
+    ? S.careers.filter(c=>S.currentRoster.has(c.owner))
+    : S.careers;
+}
+function ownerVisible(owner){
+  return S.rosterFilter !== "current" || S.currentRoster.has(owner);
+}
 function registerRedraw(fn){ S.redraws.push(fn); }
 window.addEventListener("resize", debounce(()=>S.redraws.forEach(f=>{ try{f();}catch(e){} }), 180));
 
@@ -1621,17 +1665,18 @@ window.addEventListener("resize", debounce(()=>S.redraws.forEach(f=>{ try{f();}c
 /* ---------- masthead + hero ---------- */
 function renderHero(){
   const completed = S.completedYears;
-  const owners = S.careers.length;
+  const owners = visibleCareers().length;
+  const filtered = S.rosterFilter === "current";
   const rings = S.records.filter(r=>r.champ).length;
   const buyins = S.records.reduce((a,r)=>a + Math.abs(r.buyin||0), 0);
 
   $("mastheadMeta").innerHTML =
     "<div><b>"+completed.length+"</b> seasons on record</div>"+
-    "<div><b>"+owners+"</b> managers, all-time</div>";
+    "<div><b>"+owners+"</b> "+(filtered?"managers, current":"managers, all-time")+"</div>";
 
   const digits = [
     {n: completed.length, l:"Seasons played"},
-    {n: owners,           l:"Managers, all-time"},
+    {n: owners,           l: filtered ? "Managers in the league" : "Managers, all-time"},
     {n: rings,            l:"Rings awarded"},
     {n: money(buyins),    l:"Total buy-ins collected"}
   ];
@@ -1661,6 +1706,65 @@ const CHAPTERS = [
   ["ch-records","Records"], ["ch-sim","What-If"]
 ];
 const HOME_ID = "__home__";   // sentinel target for the top-of-page link
+
+/* ---------- roster filter (complete history vs current league) ---------- */
+function initRosterFilter(){
+  const wrap = $("rosterToggle");
+  const thumb = $("rosterSegThumb");
+  const move = (btn)=>{
+    if(!thumb || !btn) return;
+    const draw = ()=>{
+      thumb.style.width = btn.offsetWidth + "px";
+      thumb.style.transform = "translateX(" + btn.offsetLeft + "px)";
+    };
+    draw(); requestAnimationFrame(draw);
+  };
+  wrap.querySelectorAll("button").forEach(btn=>{
+    btn.addEventListener("click", ()=>{
+      if(S.rosterFilter === btn.dataset.roster) return;
+      S.rosterFilter = btn.dataset.roster;
+      wrap.querySelectorAll("button").forEach(b=>b.classList.toggle("active", b===btn));
+      move(btn);
+      applyRosterFilter();
+    });
+  });
+  move(wrap.querySelector("button.active"));
+  registerRedraw(()=>move(wrap.querySelector("button.active")));
+  updateRosterNote();
+}
+
+function updateRosterNote(){
+  const gone = S.careers.filter(c=>!S.currentRoster.has(c.owner));
+  const note = $("rosterNote");
+  if(!note) return;
+  note.textContent = S.rosterFilter === "current"
+    ? "Showing the "+S.currentRoster.size+" managers currently in the league"
+    : (gone.length
+        ? "Including "+gone.length+" former manager"+(gone.length===1?"":"s")+": "+
+          gone.map(c=>displayName(c.owner)).join(", ")
+        : "Every manager on record");
+}
+
+/* Re-render everything the filter touches. Season Standings and the Trophy
+   Case are deliberately left complete: dropping a departed manager from a
+   finished season would show a 10-team year with 8 teams and gaps in the
+   rankings, and would blank out the years they won. */
+function applyRosterFilter(){
+  updateRosterNote();
+  renderHero();
+  renderLeaderboard();
+  rebuildTrendOwners();
+  renderLedger();
+  renderLuck();
+  renderDynasty();
+  renderRecords();
+  rebuildManagerOptions();
+  if(S.h2h) renderH2H();
+  if(S.chain && S.chain.length){
+    if($("draftSeason").value) runDraftGrades();
+    if($("simSeason").value)   runSimulator();
+  }
+}
 
 /* The drawer is the only nav below 1120px and the always-open rail above it,
    so both states are driven from this one list. */
@@ -1969,7 +2073,7 @@ function moveSegThumb(btn){
 }
 function renderLeaderboard(){
   const m = METRICS.find(x=>x.key===metricKey);
-  const list = S.careers.filter(c=>c.played >= m.min);
+  const list = visibleCareers().filter(c=>c.played >= m.min);
   const sorted = [...list].sort((a,b)=>
     (m.asc ? a[m.key]-b[m.key] : b[m.key]-a[m.key]) || b.winPct-a.winPct);
 
@@ -2079,6 +2183,48 @@ function renderTrends(){
     "but past about eight managers the colours start repeating — fewer selected reads more clearly.";
   $("trendsNote").textContent = note;
 }
+/* The owner list depends on the roster filter, so building it is split out
+   and can be re-run whenever the filter changes. */
+function rebuildTrendOwners(){
+  const eligible = visibleCareers().filter(c=>c.played>0)
+    .sort((a,b)=> b.played-a.played || a.owner.localeCompare(b.owner));
+  const allowed = new Set(eligible.map(c=>c.owner));
+  [...trendSel].forEach(o=>{ if(!allowed.has(o)) trendSel.delete(o); });
+  if(!trendSel.size) eligible.slice(0,4).forEach(c=>trendSel.add(c.owner));
+
+  const list = $("ownerSelectList");
+  list.innerHTML = "";
+  eligible.forEach(c=>{
+    const opt = el("label","ms-opt");
+    opt.dataset.owner = c.owner;
+    opt.innerHTML = '<input type="checkbox">'+
+      '<span class="swatch" style="background:'+c.color+'"></span>'+
+      "<span>"+esc(displayName(c.owner))+"</span>";
+    opt.querySelector("input").addEventListener("change", ev=>{
+      if(ev.target.checked) trendSel.add(c.owner); else trendSel.delete(c.owner);
+      syncTrendPicker();
+    });
+    list.appendChild(opt);
+  });
+  S.trendEligible = eligible;
+  syncTrendPicker();
+}
+function syncTrendPicker(){
+  const eligible = S.trendEligible || [];
+  $("ownerSelectList").querySelectorAll(".ms-opt").forEach(o=>{
+    const on = trendSel.has(o.dataset.owner);
+    o.querySelector("input").checked = on;
+    o.classList.toggle("on", on);
+  });
+  const n = trendSel.size;
+  $("ownerSelectLabel").textContent =
+      n === 0 ? "Select managers"
+    : n === 1 ? displayName([...trendSel][0])
+    : n === eligible.length ? "All "+n+" managers"
+    : n+" managers selected";
+  renderTrends();
+}
+
 function initTrends(){
   $("trendMetricChips").querySelectorAll(".chip").forEach(c=>{
     c.addEventListener("click", ()=>{
@@ -2088,52 +2234,14 @@ function initTrends(){
     });
   });
 
-  const eligible = S.careers.filter(c=>c.played>0)
-    .sort((a,b)=> b.played-a.played || a.owner.localeCompare(b.owner));
-  eligible.slice(0,4).forEach(c=>trendSel.add(c.owner));
-
-  const btn   = $("ownerSelectBtn");
-  const panel = $("ownerSelectPanel");
-  const list  = $("ownerSelectList");
-  const label = $("ownerSelectLabel");
-
-  const syncLabel = ()=>{
-    const n = trendSel.size;
-    label.textContent = n === 0 ? "Select managers"
-      : n === 1 ? displayName([...trendSel][0])
-      : n === eligible.length ? "All "+n+" managers"
-      : n+" managers selected";
-  };
-  const syncOptions = ()=>{
-    list.querySelectorAll(".ms-opt").forEach(o=>{
-      const on = trendSel.has(o.dataset.owner);
-      o.querySelector("input").checked = on;
-      o.classList.toggle("on", on);
-    });
-  };
-  const update = ()=>{ syncOptions(); syncLabel(); renderTrends(); };
-
-  eligible.forEach(c=>{
-    const opt = el("label","ms-opt");
-    opt.dataset.owner = c.owner;
-    opt.innerHTML = '<input type="checkbox">'+
-      '<span class="swatch" style="background:'+c.color+'"></span>'+
-      "<span>"+esc(displayName(c.owner))+"</span>";
-    opt.querySelector("input").addEventListener("change", ev=>{
-      if(ev.target.checked) trendSel.add(c.owner); else trendSel.delete(c.owner);
-      update();
-    });
-    list.appendChild(opt);
-  });
-
+  const btn = $("ownerSelectBtn"), panel = $("ownerSelectPanel");
   panel.querySelectorAll(".ms-actions button").forEach(b=>{
     b.addEventListener("click", ()=>{
       trendSel.clear();
-      if(b.dataset.act === "all") eligible.forEach(c=>trendSel.add(c.owner));
-      update();
+      if(b.dataset.act === "all") (S.trendEligible||[]).forEach(c=>trendSel.add(c.owner));
+      syncTrendPicker();
     });
   });
-
   const open = (yes)=>{
     panel.hidden = !yes;
     btn.setAttribute("aria-expanded", yes ? "true" : "false");
@@ -2143,7 +2251,7 @@ function initTrends(){
   document.addEventListener("click", ()=>open(false));
   document.addEventListener("keydown", ev=>{ if(ev.key === "Escape") open(false); });
 
-  update();
+  rebuildTrendOwners();
   registerRedraw(renderTrends);
 }
 
@@ -2151,14 +2259,14 @@ function initTrends(){
 let ledgerMode = "career";
 function renderLedger(){
   if(ledgerMode === "career"){
-    const items = S.careers.filter(c=>c.played>0)
+    const items = visibleCareers().filter(c=>c.played>0)
       .sort((a,b)=>b.net-a.net)
       .map(c=>({label: displayName(c.owner), value: c.net,
                 sub: c.played+" seasons · "+money(c.netPerSeason)+"/season"}));
     barChart($("ledgerWrap"), items, {diverging:true, vFmt:money, metricName:"Net profit", rowH:31});
     legendFor($("ledgerLegend"), [{name:"In the black", color:"#12c99a"},{name:"In the red", color:"#e5574b"}]);
   } else {
-    const series = S.careers.filter(c=>c.played>=3)
+    const series = visibleCareers().filter(c=>c.played>=3)
       .sort((a,b)=>b.net-a.net).slice(0,CONFIG.MAX_TREND_SERIES)
       .map(c=>{
         let run = 0;
@@ -2187,7 +2295,7 @@ let luckMode = "career";
 function renderLuck(){
   if(luckMode === "career"){
     const by = new Map();
-    S.luck.forEach(r=>{
+    S.luck.filter(r=>ownerVisible(r.owner)).forEach(r=>{
       if(!by.has(r.owner)) by.set(r.owner, {owner:r.owner, luck:0, seasons:0});
       const o = by.get(r.owner); o.luck += r.luck; o.seasons++;
     });
@@ -2202,14 +2310,14 @@ function renderLuck(){
       {name:"Won more than the scoring deserved", color:"#12c99a"},
       {name:"Won less than the scoring deserved", color:"#e5574b"}]);
   } else {
-    const pts = S.luck.map(r=>{
+    const pts = S.luck.filter(r=>ownerVisible(r.owner)).map(r=>{
       const c = S.careerBy.get(r.owner);
       return {x:r.expW, y:r.actualW, color:c?c.color:"#888",
               label: displayName(r.owner)+" · "+r.year};
     });
     scatterChart($("luckWrap"), pts, {height:440,
       xTitle:"Expected wins (from scoring rank)", yTitle:"Actual wins"});
-    const shown = S.careers.filter(c=>c.played>0);
+    const shown = visibleCareers().filter(c=>c.played>0);
     legendFor($("luckLegend"), shown.map(c=>({name:displayName(c.owner), color:c.color})));
   }
 }
@@ -2227,7 +2335,7 @@ function initLuck(){
 
 /* ---------- 07 dynasty rankings ---------- */
 function renderDynasty(){
-  const rows = S.careers.filter(c=>c.played>0 || c.titles>0)
+  const rows = visibleCareers().filter(c=>c.played>0 || c.titles>0)
     .sort((a,b)=>b.dynasty-a.dynasty);
   $("dynastyBody").innerHTML = rows.map((c,i)=>
     "<tr>"+
@@ -2250,7 +2358,7 @@ function renderDynasty(){
 /* ---------- 08 rivalries & head-to-head ---------- */
 function renderH2H(){
   const {pair, games, streaks} = S.h2h;
-  const active = S.careers
+  const active = visibleCareers()
     .filter(c=>[...pair.keys()].some(k=>k.split("||")[0]===c.owner))
     .sort((a,b)=>a.owner.localeCompare(b.owner));
 
@@ -2345,7 +2453,8 @@ function renderH2H(){
 
 /* ---------- 10 records & awards ---------- */
 function renderRecords(){
-  const played = S.records.filter(r=>r.played);
+  const played = S.records.filter(r=>r.played && ownerVisible(r.owner));
+  const luck   = S.luck.filter(r=>ownerVisible(r.owner));
   const grid = $("recordsGrid");
   const card = (title, rows) => '<div class="rcard"><h4>'+esc(title)+"</h4>"+
     rows.map(r=>'<div class="line"><span class="k">'+r.k+'</span><span class="v">'+r.v+"</span></div>").join("")+"</div>";
@@ -2364,10 +2473,10 @@ function renderRecords(){
     card("Worst single-season records", top([...played].filter(r=>r.games)
       .sort((a,b)=>(a.w/a.games)-(b.w/b.games))).map(r=>({k:nm(r), v:r.w+"-"+r.l}))),
     card("Biggest single-season paydays", top([...played].sort((a,b)=>b.net-a.net)).map(r=>({k:nm(r), v:money(r.net)}))),
-    card("Luckiest seasons", top([...S.luck].sort((a,b)=>b.luck-a.luck)).map(r=>({
+    card("Luckiest seasons", top([...luck].sort((a,b)=>b.luck-a.luck)).map(r=>({
       k: esc(displayName(r.owner))+" <span style='color:var(--chalk-mute)'>'"+String(r.year).slice(2)+"</span>",
       v: signed(r.luck)+" wins"}))),
-    card("Unluckiest seasons", top([...S.luck].sort((a,b)=>a.luck-b.luck)).map(r=>({
+    card("Unluckiest seasons", top([...luck].sort((a,b)=>a.luck-b.luck)).map(r=>({
       k: esc(displayName(r.owner))+" <span style='color:var(--chalk-mute)'>'"+String(r.year).slice(2)+"</span>",
       v: signed(r.luck)+" wins"})))
   ].join("");
@@ -2421,7 +2530,7 @@ function renderManager(owner){
 
     if(S.h2h){
       const rows = [];
-      S.careers.forEach(o=>{
+      visibleCareers().forEach(o=>{
         if(o.owner===owner) return;
         const p = S.h2h.pair.get(owner+"||"+o.owner);
         if(p && p.games) rows.push({name:o.owner, p});
@@ -2472,19 +2581,31 @@ function renderManager(owner){
     draw();
   }
 }
+function rebuildManagerOptions(){
+  const sel = $("mgrSelect");
+  const list = [...visibleCareers()].sort((a,b)=>displayName(a.owner).localeCompare(displayName(b.owner)));
+  const prev = sel.value;
+  sel.innerHTML = list.map(c=>'<option value="'+esc(c.owner)+'">'+esc(displayName(c.owner))+"</option>").join("");
+  S.mgrList = list;
+  if(!list.length){ $("mgrPanel").innerHTML = ""; return; }
+  // keep the current manager selected if the filter still includes them
+  const keep = list.some(c=>c.owner===prev) ? prev : list[0].owner;
+  sel.value = keep;
+  renderManager(keep);
+}
 function initManagers(){
   const sel = $("mgrSelect");
-  const list = [...S.careers].sort((a,b)=>displayName(a.owner).localeCompare(displayName(b.owner)));
-  sel.innerHTML = list.map(c=>'<option value="'+esc(c.owner)+'">'+esc(displayName(c.owner))+"</option>").join("");
   const go = (i)=>{
+    const list = S.mgrList || [];
+    if(!list.length) return;
     const idx = Math.max(0, Math.min(list.length-1, i));
     sel.value = list[idx].owner;
     renderManager(list[idx].owner);
   };
   sel.addEventListener("change", ()=>renderManager(sel.value));
-  $("mgrPrev").addEventListener("click", ()=>go(list.findIndex(c=>c.owner===sel.value)-1));
-  $("mgrNext").addEventListener("click", ()=>go(list.findIndex(c=>c.owner===sel.value)+1));
-  go(0);
+  $("mgrPrev").addEventListener("click", ()=>go((S.mgrList||[]).findIndex(c=>c.owner===sel.value)-1));
+  $("mgrNext").addEventListener("click", ()=>go((S.mgrList||[]).findIndex(c=>c.owner===sel.value)+1));
+  rebuildManagerOptions();
 }
 
 /* ================================================================== *
@@ -2629,7 +2750,7 @@ async function runDraftGrades(){
     rows.forEach(r=>{
       const uid = r.uid || rosterOwner[r.rosterId];
       const nm  = S.ownerMap[uid];
-      if(!nm) return;
+      if(!nm || !ownerVisible(nm)) return;
       if(!byMgr.has(nm)) byMgr.set(nm, {owner:nm, value:0, pts:0, picks:[]});
       const m = byMgr.get(nm);
       m.value += r.value; m.pts += r.pts; m.picks.push(r);
@@ -2725,7 +2846,7 @@ async function runSimulator(){
 
     const rosters = await sget("/league/"+leagueId+"/rosters");
     const ownerOf = {};
-    (rosters||[]).forEach(r=>{ const n = S.ownerMap[r.owner_id]; if(n) ownerOf[r.roster_id]=n; });
+    (rosters||[]).forEach(r=>{ const n = S.ownerMap[r.owner_id]; if(n && ownerVisible(n)) ownerOf[r.roster_id]=n; });
 
     const packs = await pool(weeks.map(w => async ()=>{
       const [mus, stats] = await Promise.all([
@@ -2903,7 +3024,9 @@ async function boot(){
   S.careers = buildCareers(S.records);
   S.careers.forEach(c=>S.careerBy.set(c.owner, c));
   S.luck = computeLuck(S.records);
+  S.currentRoster = deriveCurrentRoster(S.records);
 
+  initRosterFilter();
   renderHero();
   renderTrophyCase();
   initStandings();
